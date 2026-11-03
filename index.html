@@ -2,239 +2,393 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>冷蔵庫スキャナー ＆ 献立提案</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>在庫表スキャナー ＆ 修正エディタ</title>
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      margin: 0; padding: 15px; background-color: #f7f9fa; color: #333;
+      margin: 0; padding: 12px; background-color: #f4f6f8; color: #333;
     }
     .card {
-      background: #fff; border-radius: 12px; padding: 20px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.08); max-width: 500px; margin: 0 auto;
+      background: #fff; border-radius: 12px; padding: 16px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08); max-width: 600px; margin: 0 auto;
     }
-    h1 { font-size: 1.3rem; margin-top: 0; text-align: center; color: #2c3e50; }
-    
+    h1 { font-size: 1.2rem; margin-top: 0; text-align: center; color: #1a202c; }
+
+    /* 設定エリア */
     .settings {
-      background: #eef2f5; padding: 12px; border-radius: 8px; margin-bottom: 15px; font-size: 0.85rem;
+      background: #edf2f7; padding: 10px; border-radius: 8px; margin-bottom: 15px; font-size: 0.85rem;
     }
-    .settings input, .settings select {
-      width: 100%; padding: 8px; margin-top: 5px; margin-bottom: 8px; box-sizing: border-box;
-      border: 1px solid #ccc; border-radius: 4px; background: #fff;
-    }
-    .btn-check {
-      background: #4a5568; color: #fff; border: none; padding: 6px 12px;
-      border-radius: 4px; font-size: 0.8rem; cursor: pointer; width: 100%;
+    .settings input {
+      width: 100%; padding: 8px; margin-top: 4px; box-sizing: border-box;
+      border: 1px solid #cbd5e0; border-radius: 4px; background: #fff;
     }
 
-    .btn-camera {
-      width: 100%; padding: 16px; background: #ff9500; color: #fff;
-      border: none; border-radius: 10px; font-size: 1.1rem; font-weight: bold; cursor: pointer;
+    /* カメラ起動ボタン */
+    .btn-main {
+      width: 100%; padding: 15px; background: #007aff; color: #fff;
+      border: none; border-radius: 10px; font-size: 1.05rem; font-weight: bold; cursor: pointer;
     }
-    #fileInput { display: none; }
+    .btn-main:active { background: #0056b3; }
 
+    /* フルスクリーンカメラモーダル */
+    #cameraModal {
+      display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+      background: #000; z-index: 9999;
+    }
+    video { width: 100%; height: 100%; object-fit: cover; }
+
+    /* A4撮影ガイド枠 */
+    .guide-frame {
+      position: absolute; top: 8%; left: 6%; width: 88%; height: 74%;
+      border: 3px dashed #34c759; border-radius: 12px; box-sizing: border-box;
+      pointer-events: none; box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45);
+    }
+    .guide-text {
+      position: absolute; top: 3%; width: 100%; text-align: center;
+      color: #fff; font-size: 14px; font-weight: bold; text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+      pointer-events: none;
+    }
+
+    /* カメラのコントロール */
+    .camera-controls {
+      position: absolute; bottom: 25px; left: 0; right: 0;
+      display: flex; justify-content: space-around; align-items: center; padding: 0 20px;
+    }
+    .btn-shutter {
+      width: 72px; height: 72px; border-radius: 50%;
+      border: 4px solid #fff; background: rgba(255, 255, 255, 0.3);
+      cursor: pointer; outline: none;
+    }
+    .btn-shutter:active { background: #fff; }
+    .btn-cancel {
+      color: #fff; background: rgba(0,0,0,0.6); border: 1px solid #fff;
+      padding: 10px 18px; border-radius: 20px; font-size: 0.9rem; cursor: pointer;
+    }
+
+    /* ステータス表示 */
+    #status {
+      margin-top: 15px; text-align: center; font-weight: bold; font-size: 0.9rem;
+    }
+    .status-loading { color: #d97706; }
+    .status-success { color: #16a34a; }
+    .status-error { color: #dc2626; }
+
+    /* プレビュー画像 */
     #previewWrapper { margin-top: 15px; display: none; text-align: center; }
-    #preview { width: 100%; border-radius: 8px; max-height: 250px; object-fit: cover; }
+    #previewImg { max-width: 100%; height: auto; max-height: 180px; border-radius: 6px; border: 1px solid #ddd; }
 
-    .btn-analyze {
-      width: 100%; padding: 14px; background: #34c759; color: #fff;
-      border: none; border-radius: 8px; font-size: 1rem; font-weight: bold;
-      margin-top: 10px; cursor: pointer; display: none;
+    /* 読み取り・修正テーブル */
+    #editorArea { display: none; margin-top: 20px; }
+    .meta-box {
+      display: flex; align-items: center; justify-content: space-between;
+      background: #edf2f7; padding: 10px; border-radius: 6px; margin-bottom: 12px;
+    }
+    .meta-box label { font-weight: bold; font-size: 0.9rem; }
+    .meta-box input {
+      font-size: 0.95rem; padding: 6px 10px; border: 1px solid #cbd5e0;
+      border-radius: 4px; width: 55%; text-align: center;
     }
 
-    #status { margin-top: 15px; font-weight: bold; text-align: center; font-size: 0.9rem; word-break: break-all; }
-    #result { margin-top: 15px; line-height: 1.6; font-size: 0.95rem; }
-    .recipe-card {
-      background: #fdfdfd; border-left: 4px solid #ff9500;
-      padding: 10px 15px; margin-bottom: 12px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    .table-container { overflow-x: auto; max-height: 50vh; border: 1px solid #e2e8f0; border-radius: 6px; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.9rem; background: #fff; }
+    th, td { padding: 8px 10px; border-bottom: 1px solid #e2e8f0; text-align: left; }
+    th { background: #f8fafc; font-weight: bold; color: #4a5568; position: sticky; top: 0; }
+    td input {
+      width: 100%; padding: 6px; box-sizing: border-box;
+      border: 1px solid #cbd5e0; border-radius: 4px; font-size: 0.9rem;
     }
+    td.col-num input { text-align: right; font-weight: bold; color: #2b6cb0; }
+    .btn-del {
+      background: #fed7d7; color: #c53030; border: none; border-radius: 4px;
+      padding: 4px 8px; cursor: pointer; font-size: 0.8rem;
+    }
+    .btn-add-row {
+      margin-top: 8px; padding: 8px 12px; background: #e2e8f0; border: none;
+      border-radius: 6px; font-size: 0.85rem; font-weight: bold; cursor: pointer; width: 100%;
+    }
+
+    /* 確定アクション */
+    .btn-confirm {
+      width: 100%; padding: 15px; background: #34c759; color: #fff;
+      border: none; border-radius: 10px; font-size: 1.05rem; font-weight: bold;
+      cursor: pointer; margin-top: 15px;
+    }
+    .btn-confirm:active { background: #28a745; }
   </style>
 </head>
 <body>
 
   <div class="card">
-    <h1>🥦 冷蔵庫スキャナー</h1>
+    <h1>📋 在庫表スキャナー</h1>
 
+    <!-- APIキー設定 -->
     <div class="settings">
       <label>🔑 Gemini APIキー:</label>
       <input type="password" id="apiKeyInput" placeholder="AIzaSy... を貼り付け">
-
-      <button type="button" class="btn-check" onclick="checkAvailableModels()">
-        🔍 利用可能なモデルを確認・取得する
-      </button>
-
-      <div id="modelSelectArea" style="margin-top: 10px; display: none;">
-        <label>🎯 使用するモデル:</label>
-        <select id="modelSelect"></select>
-      </div>
     </div>
 
-    <!-- カメラ起動 -->
-    <button type="button" class="btn-camera" onclick="document.getElementById('fileInput').click();">
-      📷 冷蔵庫の中を撮影する
+    <!-- カメラ起動ボタン -->
+    <button type="button" class="btn-main" onclick="openCamera()">
+      📷 ガイド枠付きカメラを起動する
     </button>
-    <input type="file" id="fileInput" accept="image/*" capture="environment" onchange="handleImage(this)">
 
-    <!-- プレビュー -->
+    <!-- 撮影画像プレビュー -->
     <div id="previewWrapper">
-      <img id="preview" src="">
-      <button type="button" id="analyzeBtn" class="btn-analyze" onclick="generateRecipes()">
-        ✨ この食材で献立を考える
-      </button>
+      <img id="previewImg" src="">
     </div>
 
+    <!-- ステータス -->
     <div id="status"></div>
-    <div id="result"></div>
+
+    <!-- 読み取り結果・手動修正エリア -->
+    <div id="editorArea">
+      <div class="meta-box">
+        <label>📅 対象週（月曜日）:</label>
+        <input type="text" id="weekDate" placeholder="例: 2026/11/02 週">
+      </div>
+
+      <div class="table-container">
+        <table id="stockTable">
+          <thead>
+            <tr>
+              <th style="width: 55%;">食材名（品目）</th>
+              <th style="width: 30%;">繰越数</th>
+              <th style="width: 15%;">削除</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+      </div>
+
+      <button type="button" class="btn-add-row" onclick="addRow()">＋ 行を追加する</button>
+
+      <button type="button" class="btn-confirm" onclick="confirmData()">
+        ✅ この内容で確定する（保存準備）
+      </button>
+    </div>
+  </div>
+
+  <!-- フルスクリーンカメラ画面（ガイド枠付き） -->
+  <div id="cameraModal">
+    <video id="video" autoplay playsinline muted></video>
+    <div class="guide-text">緑の枠内にA4用紙全体を収めてください</div>
+    <div class="guide-frame"></div>
+
+    <div class="camera-controls">
+      <button type="button" class="btn-cancel" onclick="closeCamera()">キャンセル</button>
+      <button type="button" class="btn-shutter" onclick="takeSnapshot()"></button>
+      <div style="width: 60px;"></div>
+    </div>
   </div>
 
   <script>
+    let videoStream = null;
     let currentBase64 = "";
+
+    // 試行するモデル候補（混雑に強い lite を優先）
+    const MODEL_CANDIDATES = [
+      'gemini-3.5-flash-lite',
+      'gemini-3.8-flash-lite',
+      'gemini-3.8-flash'
+    ];
 
     window.onload = () => {
       const savedKey = localStorage.getItem('gemini_api_key');
-      if (savedKey) {
-        document.getElementById('apiKeyInput').value = savedKey;
-        // キーが保存されていれば自動でモデル一覧を取得
-        checkAvailableModels();
-      }
+      if (savedKey) document.getElementById('apiKeyInput').value = savedKey;
     };
 
-    // 利用可能なモデル一覧をGoogleから直接取得する
-    async function checkAvailableModels() {
-      const apiKey = document.getElementById('apiKeyInput').value.trim();
+    // 1. ガイド付きカメラの起動（iOS Safari対応）
+    async function openCamera() {
+      const modal = document.getElementById('cameraModal');
+      const video = document.getElementById('video');
       const status = document.getElementById('status');
-      const selectArea = document.getElementById('modelSelectArea');
-      const select = document.getElementById('modelSelect');
 
+      status.innerText = '';
+
+      try {
+        videoStream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 }
+          },
+          audio: false
+        });
+        video.srcObject = videoStream;
+        await video.play();
+        modal.style.display = 'block';
+      } catch (err) {
+        status.className = 'status-error';
+        status.innerText = `カメラ起動エラー: ${err.message} (Safariのカメラ許可設定を確認してください)`;
+      }
+    }
+
+    // カメラの終了
+    function closeCamera() {
+      if (videoStream) {
+        videoStream.getTracks().forEach(track => track.stop());
+        videoStream = null;
+      }
+      document.getElementById('cameraModal').style.display = 'none';
+    }
+
+    // 2. シャッター撮影
+    function takeSnapshot() {
+      const video = document.getElementById('video');
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      // 解像度を保持したまま圧縮（長辺1800px、品質0.85）
+      const maxDim = 1800;
+      let w = canvas.width, h = canvas.height;
+      if (w > h && w > maxDim) { h = Math.round((h * maxDim) / w); w = maxDim; }
+      else if (h > maxDim) { w = Math.round((w * maxDim) / h); h = maxDim; }
+
+      const resizeCanvas = document.createElement('canvas');
+      resizeCanvas.width = w; resizeCanvas.height = h;
+      resizeCanvas.getContext('2d').drawImage(canvas, 0, 0, w, h);
+
+      currentBase64 = resizeCanvas.toDataURL('image/jpeg', 0.85).split(',')[1];
+
+      // プレビュー表示
+      document.getElementById('previewImg').src = resizeCanvas.toDataURL('image/jpeg', 0.85);
+      document.getElementById('previewWrapper').style.display = 'block';
+
+      closeCamera();
+      analyzeStockSheet();
+    }
+
+    // 3. Gemini APIによる読み取り
+    async function analyzeStockSheet() {
+      const apiKey = document.getElementById('apiKeyInput').value.trim();
       if (!apiKey) {
-        alert('APIキーを入力してください');
+        alert('Gemini APIキーを入力してください。');
         return;
       }
       localStorage.setItem('gemini_api_key', apiKey);
 
-      status.innerText = '🔍 有効なモデルを確認中...';
-
-      try {
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
-        const data = await res.json();
-
-        if (data.error) {
-          status.innerText = `❌ APIキー認証エラー [${data.error.code}]: ${data.error.message}`;
-          return;
-        }
-
-        // generateContent（文章・画像生成）に対応しているモデルを抽出
-        const validModels = (data.models || []).filter(m => 
-          m.supportedGenerationMethods && m.supportedGenerationMethods.includes('generateContent')
-        );
-
-        if (validModels.length === 0) {
-          status.innerText = '⚠️ 利用可能な生成モデルが見つかりませんでした。';
-          return;
-        }
-
-        // セレクトボックスに候補を追加
-        select.innerHTML = '';
-        validModels.forEach(m => {
-          const opt = document.createElement('option');
-          // "models/gemini-1.5-flash" から "models/" を除去
-          const modelId = m.name.replace('models/', '');
-          opt.value = modelId;
-          opt.innerText = modelId;
-          
-          // flash系を優先選択
-          if (modelId.includes('flash')) opt.selected = true;
-          select.appendChild(opt);
-        });
-
-        selectArea.style.display = 'block';
-        status.innerText = `✅ ${validModels.length} 個の利用可能モデルを検出しました`;
-
-      } catch (e) {
-        status.innerText = '❌ 通信エラー: ' + e.message;
-      }
-    }
-
-    function handleImage(input) {
-      const file = input.files[0];
-      if (!file) return;
-
-      const reader = new FileReader();
-      reader.onload = function(e) {
-        const img = new Image();
-        img.onload = function() {
-          const canvas = document.createElement('canvas');
-          const maxDim = 1200;
-          let w = img.width, h = img.height;
-          if (w > h && w > maxDim) { h = Math.round((h * maxDim) / w); w = maxDim; }
-          else if (h > maxDim) { w = Math.round((w * maxDim) / h); h = maxDim; }
-          canvas.width = w; canvas.height = h;
-          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-
-          currentBase64 = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
-          document.getElementById('preview').src = canvas.toDataURL('image/jpeg', 0.8);
-          document.getElementById('previewWrapper').style.display = 'block';
-          document.getElementById('analyzeBtn').style.display = 'block';
-          document.getElementById('result').innerHTML = '';
-          document.getElementById('status').innerText = '';
-        };
-        img.src = e.target.result;
-      };
-      reader.readAsDataURL(file);
-    }
-
-    async function generateRecipes() {
-      const apiKey = document.getElementById('apiKeyInput').value.trim();
-      const selectedModel = document.getElementById('modelSelect').value || 'gemini-1.5-flash';
       const status = document.getElementById('status');
-      const resultDiv = document.getElementById('result');
-      const analyzeBtn = document.getElementById('analyzeBtn');
+      const editorArea = document.getElementById('editorArea');
+      editorArea.style.display = 'none';
 
-      analyzeBtn.disabled = true;
-      status.innerText = `🤖 [${selectedModel}] で解析中...`;
+      status.className = 'status-loading';
+      status.innerText = '🤖 AIが日付・食材・手書き数字を読み取っています...（約5秒）';
 
       const prompt = `
-        この写真は冷蔵庫の中身、または食材です。
-        1. 見えている主な食材を箇条書きでリストアップしてください。
-        2. それらの食材を使って今夜作れるおすすめの料理レシピを3品提案してください。
-        3. 不足しそうな調味料があれば補足してください。
+        この画像は印刷された在庫表に、手書きで「繰り越し分」の数字を書き込んだシートです。
+        以下の情報を読み取り、必ず指定のJSONオブジェクト形式のみで返してください。
+        余計な文章やマークダウン（\`\`\`json など）は含めないでください。
+
+        1. シートの上部等に記載されている「月曜日の日付」（または該当する週の日付）。
+        2. 表の各行にある「食材名（品目名）」と、それに対応する手書きの「繰り越し分の数字」。
+           （数字の記入がない空欄行は除外するか、数量0として扱ってください）
+
+        【出力形式】
+        {
+          "week_date": "2026/11/02 週",
+          "items": [
+            {"name": "豚バラ肉スライス", "count": 15},
+            {"name": "玉ねぎ", "count": 8}
+          ]
+        }
       `;
 
-      try {
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${selectedModel}:generateContent?key=${apiKey}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{
-              parts: [
-                { text: prompt },
-                { inline_data: { mime_type: "image/jpeg", data: currentBase64 } }
-              ]
-            }]
-          })
-        });
+      let parsedData = null;
+      let lastError = null;
 
-        const data = await response.json();
+      // 混雑に備えた自動モデルフォールバック実行
+      for (const model of MODEL_CANDIDATES) {
+        try {
+          status.innerText = `🤖 [${model}] で解析中...`;
 
-        if (data.error) {
-          status.innerText = `❌ APIエラー [${data.error.code}]: ${data.error.message}`;
-          return;
+          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{
+                parts: [
+                  { text: prompt },
+                  { inline_data: { mime_type: "image/jpeg", data: currentBase64 } }
+                ]
+              }]
+            })
+          });
+
+          const data = await response.json();
+          if (data.error) {
+            lastError = data.error.message;
+            continue; // 次のモデルへ
+          }
+
+          if (data.candidates && data.candidates[0].content) {
+            let text = data.candidates[0].content.parts[0].text.trim();
+            text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+            parsedData = JSON.parse(text);
+            break; // 成功
+          }
+        } catch (e) {
+          lastError = e.message;
         }
-
-        if (!data.candidates || data.candidates.length === 0) {
-          status.innerText = '❌ AIから回答が得られませんでした。';
-          return;
-        }
-
-        const outputText = data.candidates[0].content.parts[0].text;
-        status.innerText = '✅ 献立が完成しました！';
-        resultDiv.innerHTML = `<div class="recipe-card">${outputText.replace(/\n/g, '<br>')}</div>`;
-
-      } catch (err) {
-        status.innerText = '❌ 通信エラー: ' + err.message;
-      } finally {
-        analyzeBtn.disabled = false;
       }
+
+      if (!parsedData) {
+        status.className = 'status-error';
+        status.innerText = `❌ 読み取り失敗: ${lastError || '有効なデータを取得できませんでした'}`;
+        return;
+      }
+
+      // 4. テーブルへデータを展開
+      renderEditor(parsedData);
+      status.className = 'status-success';
+      status.innerText = `✅ 読み取り完了（${parsedData.items.length}件）。誤りがあれば修正してください。`;
+    }
+
+    // 4. 編集テーブルの描画
+    function renderEditor(data) {
+      document.getElementById('weekDate').value = data.week_date || '';
+      const tbody = document.getElementById('tableBody');
+      tbody.innerHTML = '';
+
+      data.items.forEach(item => {
+        addRow(item.name, item.count);
+      });
+
+      document.getElementById('editorArea').style.display = 'block';
+    }
+
+    // 行追加
+    function addRow(name = '', count = '') {
+      const tbody = document.getElementById('tableBody');
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><input type="text" value="${name}" placeholder="食材名"></td>
+        <td class="col-num"><input type="number" value="${count}" placeholder="0"></td>
+        <td style="text-align:center;"><button type="button" class="btn-del" onclick="this.closest('tr').remove()">✕</button></td>
+      `;
+      tbody.appendChild(tr);
+    }
+
+    // 5. 確定処理（次回スプレッドシート送信に接続する部分）
+    function confirmData() {
+      const weekDate = document.getElementById('weekDate').value.trim();
+      const rows = document.querySelectorAll('#tableBody tr');
+      const finalizedItems = [];
+
+      rows.forEach(tr => {
+        const inputs = tr.querySelectorAll('input');
+        const name = inputs[0].value.trim();
+        const count = inputs[1].value.trim();
+        if (name) {
+          finalizedItems.push({ name: name, count: count ? Number(count) : 0 });
+        }
+      });
+
+      console.log("確定データ:", { week: weekDate, items: finalizedItems });
+      alert(`【確認完了】\n週: ${weekDate}\n品目数: ${finalizedItems.length}件\n\n※このデータをスプレッドシートに送信する仕組みを次回組み込みます。`);
     }
   </script>
 </body>
