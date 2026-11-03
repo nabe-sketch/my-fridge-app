@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>冷蔵庫スキャナー ＆ 献立提案</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      margin: 0; padding: 15px; background-color: #f7f9fa; color: #333;
+    }
+    .card {
+      background: #fff; border-radius: 12px; padding: 20px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08); max-width: 500px; margin: 0 auto;
+    }
+    h1 { font-size: 1.3rem; margin-top: 0; text-align: center; color: #2c3e50; }
+    
+    /* 設定エリア */
+    .settings {
+      background: #eef2f5; padding: 12px; border-radius: 8px; margin-bottom: 15px; font-size: 0.85rem;
+    }
+    .settings input {
+      width: 100%; padding: 8px; margin-top: 5px; box-sizing: border-box;
+      border: 1px solid #ccc; border-radius: 4px;
+    }
+
+    /* カメラ起動ボタン */
+    .btn-camera {
+      width: 100%; padding: 16px; background: #ff9500; color: #fff;
+      border: none; border-radius: 10px; font-size: 1.1rem; font-weight: bold; cursor: pointer;
+    }
+    .btn-camera:active { background: #e08500; }
+    #fileInput { display: none; }
+
+    /* プレビュー */
+    #previewWrapper { margin-top: 15px; display: none; text-align: center; }
+    #preview { width: 100%; border-radius: 8px; max-height: 250px; object-fit: cover; }
+
+    /* 提案ボタン */
+    .btn-analyze {
+      width: 100%; padding: 14px; background: #34c759; color: #fff;
+      border: none; border-radius: 8px; font-size: 1rem; font-weight: bold;
+      margin-top: 10px; cursor: pointer; display: none;
+    }
+
+    /* 結果表示エリア */
+    #status { margin-top: 15px; font-weight: bold; text-align: center; }
+    #result { margin-top: 15px; line-height: 1.6; font-size: 0.95rem; }
+    .recipe-card {
+      background: #fdfdfd; border-left: 4px solid #ff9500;
+      padding: 10px 15px; margin-bottom: 12px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="card">
+    <h1>🥦 冷蔵庫の残りで献立提案</h1>
+
+    <!-- 初回のみAPIキーを設定する欄（端末のブラウザ内にのみ保存されます） -->
+    <div class="settings">
+      <label>🔑 Gemini APIキー:</label>
+      <input type="password" id="apiKeyInput" placeholder="AIzaSy... を貼り付け">
+      <span style="font-size:0.75rem; color:#666;">※キーはお使いのスマホ内にのみ保存され、外部には漏れません。</span>
+    </div>
+
+    <!-- カメラ起動 -->
+    <button type="button" class="btn-camera" onclick="document.getElementById('fileInput').click();">
+      📷 冷蔵庫の中を撮影する
+    </button>
+    <input type="file" id="fileInput" accept="image/*" capture="environment" onchange="handleImage(this)">
+
+    <!-- プレビュー -->
+    <div id="previewWrapper">
+      <img id="preview" src="">
+      <button type="button" id="analyzeBtn" class="btn-analyze" onclick="generateRecipes()">
+        ✨ この食材で献立を考える
+      </button>
+    </div>
+
+    <div id="status"></div>
+    <div id="result"></div>
+  </div>
+
+  <script>
+    let currentBase64 = "";
+
+    // 画面を開いたときに保存済みのAPIキーを読み込む
+    window.onload = () => {
+      const savedKey = localStorage.getItem('gemini_api_key');
+      if (savedKey) document.getElementById('apiKeyInput').value = savedKey;
+    };
+
+    // 写真が選択された時の処理
+    function handleImage(input) {
+      const file = input.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const img = new Image();
+        img.onload = function() {
+          // 画像を軽量化（長辺1200px）
+          const canvas = document.createElement('canvas');
+          const maxDim = 1200;
+          let w = img.width, h = img.height;
+          if (w > h && w > maxDim) { h = Math.round((h * maxDim) / w); w = maxDim; }
+          else if (h > maxDim) { w = Math.round((w * maxDim) / h); h = maxDim; }
+          canvas.width = w; canvas.height = h;
+          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+
+          currentBase64 = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
+          document.getElementById('preview').src = canvas.toDataURL('image/jpeg', 0.8);
+          document.getElementById('previewWrapper').style.display = 'block';
+          document.getElementById('analyzeBtn').style.display = 'block';
+          document.getElementById('result').innerHTML = '';
+          document.getElementById('status').innerText = '';
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    // Gemini APIで献立を生成
+    async function generateRecipes() {
+      const apiKey = document.getElementById('apiKeyInput').value.trim();
+      if (!apiKey) {
+        alert('Gemini APIキーを入力してください。');
+        return;
+      }
+      localStorage.setItem('gemini_api_key', apiKey); // スマホ内に記憶
+
+      const status = document.getElementById('status');
+      const resultDiv = document.getElementById('result');
+      const analyzeBtn = document.getElementById('analyzeBtn');
+
+      analyzeBtn.disabled = true;
+      status.innerText = '🤖 食材を見分けて献立を考案中...（約5秒）';
+
+      const prompt = `
+        この写真は冷蔵庫の中身、または食材です。
+        1. 見えている主な食材を箇条書きでリストアップしてください。
+        2. それらの食材を使って今夜作れるおすすめの料理レシピを3品提案してください。
+        3. 調味料など不足しそうなものがあれば簡単に補足してください。
+        分かりやすい日本語で回答してください。
+      `;
+
+      try {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{
+              parts: [
+                { text: prompt },
+                { inline_data: { mime_type: "image/jpeg", data: currentBase64 } }
+              ]
+            }]
+          })
+        });
+
+        const data = await response.json();
+        const outputText = data.candidates[0].content.parts[0].text;
+        
+        status.innerText = '✅ 献立が完成しました！';
+        // マークダウンの改行をHTMLの改行に変換して表示
+        resultDiv.innerHTML = `<div class="recipe-card">${outputText.replace(/\n/g, '<br>')}</div>`;
+
+      } catch (err) {
+        status.innerText = '❌ エラーが発生しました: ' + err.message;
+      } finally {
+        analyzeBtn.disabled = false;
+      }
+    }
+  </script>
+</body>
+</html>
