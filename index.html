@@ -2,7 +2,8 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <!-- viewport-fit=cover でiPhoneの画面下部セーフエリアに対応 -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <title>在庫表スキャナー ＆ 修正エディタ</title>
   <style>
     body {
@@ -15,7 +16,6 @@
     }
     h1 { font-size: 1.2rem; margin-top: 0; text-align: center; color: #1a202c; }
 
-    /* 設定エリア */
     .settings {
       background: #edf2f7; padding: 10px; border-radius: 8px; margin-bottom: 15px; font-size: 0.85rem;
     }
@@ -24,61 +24,96 @@
       border: 1px solid #cbd5e0; border-radius: 4px; background: #fff;
     }
 
-    /* カメラ起動ボタン */
     .btn-main {
       width: 100%; padding: 15px; background: #007aff; color: #fff;
       border: none; border-radius: 10px; font-size: 1.05rem; font-weight: bold; cursor: pointer;
     }
     .btn-main:active { background: #0056b3; }
 
-    /* フルスクリーンカメラモーダル */
+    /* ─── フルスクリーンカメラモーダル（iOS Safari 完全対応） ─── */
     #cameraModal {
-      display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-      background: #000; z-index: 9999;
+      display: none; position: fixed; top: 0; left: 0; width: 100vw;
+      /* dvhでSafari下部バーを除いた正確な画面高さを取得 */
+      height: 100vh; height: 100dvh;
+      background: #000; z-index: 9999; overflow: hidden; touch-action: none;
     }
     video { width: 100%; height: 100%; object-fit: cover; }
 
-    /* A4撮影ガイド枠 */
-    .guide-frame {
-      position: absolute; top: 8%; left: 6%; width: 88%; height: 74%;
-      border: 3px dashed #34c759; border-radius: 12px; box-sizing: border-box;
-      pointer-events: none; box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45);
+    /* 注意喚起ヘッダー（影防止など） */
+    .camera-header-tips {
+      position: absolute; top: calc(8px + env(safe-area-inset-top, 0px));
+      left: 10px; right: 10px;
+      background: rgba(0, 0, 0, 0.75); border-radius: 8px; padding: 8px 12px;
+      display: flex; justify-content: space-around; font-size: 11px; color: #fff;
+      pointer-events: none; z-index: 2;
     }
-    .guide-text {
-      position: absolute; top: 3%; width: 100%; text-align: center;
-      color: #fff; font-size: 14px; font-weight: bold; text-shadow: 0 1px 3px rgba(0,0,0,0.8);
-      pointer-events: none;
+    .camera-header-tips span { display: flex; align-items: center; gap: 4px; }
+
+    /* 水平状態ナビゲーションバー */
+    .level-indicator-bar {
+      position: absolute; top: calc(52px + env(safe-area-inset-top, 0px));
+      left: 20px; right: 20px; padding: 6px 12px;
+      background: rgba(230, 81, 0, 0.85); color: #fff;
+      border-radius: 20px; font-size: 13px; font-weight: bold; text-align: center;
+      transition: background 0.3s, transform 0.2s; pointer-events: none; z-index: 2;
+    }
+    .level-indicator-bar.level-ok {
+      background: rgba(46, 125, 50, 0.9);
+      box-shadow: 0 0 10px rgba(76, 175, 80, 0.8);
     }
 
-    /* カメラのコントロール */
+    /* A4撮影ガイド枠 */
+    .guide-frame {
+      position: absolute; top: 18%; left: 8%; width: 84%; height: 60%;
+      border: 3px dashed #ff9800; border-radius: 12px; box-sizing: border-box;
+      pointer-events: none; box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45);
+      transition: border-color 0.3s;
+    }
+    /* 水平時に枠が緑色へ */
+    .guide-frame.level-ok {
+      border: 3px solid #00e676;
+    }
+
+    /* 照準センターマーク */
+    .center-cross {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      width: 24px; height: 24px; pointer-events: none; opacity: 0.6;
+    }
+    .center-cross::before, .center-cross::after {
+      content: ''; position: absolute; background: #fff;
+    }
+    .center-cross::before { top: 11px; left: 0; width: 24px; height: 2px; }
+    .center-cross::after { top: 0; left: 11px; width: 2px; height: 24px; }
+
+    /* カメラのコントロール部（ボタン重なり解消） */
     .camera-controls {
-      position: absolute; bottom: 25px; left: 0; right: 0;
-      display: flex; justify-content: space-around; align-items: center; padding: 0 20px;
+      position: absolute;
+      /* Safariのツールバー＋追加余白を確保して確実に浮かせる */
+      bottom: calc(25px + env(safe-area-inset-bottom, 20px));
+      left: 0; right: 0;
+      display: flex; justify-content: space-around; align-items: center;
+      padding: 0 25px; z-index: 10;
     }
     .btn-shutter {
-      width: 72px; height: 72px; border-radius: 50%;
-      border: 4px solid #fff; background: rgba(255, 255, 255, 0.3);
-      cursor: pointer; outline: none;
+      width: 76px; height: 76px; border-radius: 50%;
+      border: 5px solid #fff; background: rgba(255, 255, 255, 0.3);
+      cursor: pointer; outline: none; transition: transform 0.1s;
     }
-    .btn-shutter:active { background: #fff; }
+    .btn-shutter:active { transform: scale(0.92); background: #fff; }
     .btn-cancel {
       color: #fff; background: rgba(0,0,0,0.6); border: 1px solid #fff;
       padding: 10px 18px; border-radius: 20px; font-size: 0.9rem; cursor: pointer;
     }
 
-    /* ステータス表示 */
-    #status {
-      margin-top: 15px; text-align: center; font-weight: bold; font-size: 0.9rem;
-    }
+    /* ─── 修正テーブル＆結果エリア ─── */
+    #status { margin-top: 15px; text-align: center; font-weight: bold; font-size: 0.9rem; }
     .status-loading { color: #d97706; }
     .status-success { color: #16a34a; }
     .status-error { color: #dc2626; }
 
-    /* プレビュー画像 */
     #previewWrapper { margin-top: 15px; display: none; text-align: center; }
     #previewImg { max-width: 100%; height: auto; max-height: 180px; border-radius: 6px; border: 1px solid #ddd; }
 
-    /* 読み取り・修正テーブル */
     #editorArea { display: none; margin-top: 20px; }
     .meta-box {
       display: flex; align-items: center; justify-content: space-between;
@@ -108,7 +143,6 @@
       border-radius: 6px; font-size: 0.85rem; font-weight: bold; cursor: pointer; width: 100%;
     }
 
-    /* 確定アクション */
     .btn-confirm {
       width: 100%; padding: 15px; background: #34c759; color: #fff;
       border: none; border-radius: 10px; font-size: 1.05rem; font-weight: bold;
@@ -122,26 +156,21 @@
   <div class="card">
     <h1>📋 在庫表スキャナー</h1>
 
-    <!-- APIキー設定 -->
     <div class="settings">
       <label>🔑 Gemini APIキー:</label>
       <input type="password" id="apiKeyInput" placeholder="AIzaSy... を貼り付け">
     </div>
 
-    <!-- カメラ起動ボタン -->
     <button type="button" class="btn-main" onclick="openCamera()">
       📷 ガイド枠付きカメラを起動する
     </button>
 
-    <!-- 撮影画像プレビュー -->
     <div id="previewWrapper">
       <img id="previewImg" src="">
     </div>
 
-    <!-- ステータス -->
     <div id="status"></div>
 
-    <!-- 読み取り結果・手動修正エリア -->
     <div id="editorArea">
       <div class="meta-box">
         <label>📅 対象週（月曜日）:</label>
@@ -169,16 +198,32 @@
     </div>
   </div>
 
-  <!-- フルスクリーンカメラ画面（ガイド枠付き） -->
+  <!-- フルスクリーンカメラ画面 -->
   <div id="cameraModal">
     <video id="video" autoplay playsinline muted></video>
-    <div class="guide-text">緑の枠内にA4用紙全体を収めてください</div>
-    <div class="guide-frame"></div>
 
+    <!-- 注意事項ヘッダー -->
+    <div class="camera-header-tips">
+      <span>💡 手元の影に注意</span>
+      <span>📐 真上から平行に</span>
+      <span>🔲 枠内に全体を配置</span>
+    </div>
+
+    <!-- 水平検知ステータス -->
+    <div id="levelBar" class="level-indicator-bar">
+      📱 スマホを書類と平行（真上）に向けてください
+    </div>
+
+    <!-- ガイド枠と照準マーク -->
+    <div id="guideFrame" class="guide-frame">
+      <div class="center-cross"></div>
+    </div>
+
+    <!-- コントロール部 -->
     <div class="camera-controls">
       <button type="button" class="btn-cancel" onclick="closeCamera()">キャンセル</button>
       <button type="button" class="btn-shutter" onclick="takeSnapshot()"></button>
-      <div style="width: 60px;"></div>
+      <div style="width: 65px;"></div>
     </div>
   </div>
 
@@ -186,7 +231,6 @@
     let videoStream = null;
     let currentBase64 = "";
 
-    // 試行するモデル候補（混雑に強い lite を優先）
     const MODEL_CANDIDATES = [
       'gemini-3.5-flash-lite',
       'gemini-3.8-flash-lite',
@@ -198,13 +242,27 @@
       if (savedKey) document.getElementById('apiKeyInput').value = savedKey;
     };
 
-    // 1. ガイド付きカメラの起動（iOS Safari対応）
+    // 1. カメラ起動 ＆ ジャイロセンサー許可（iOS 13+対応）
     async function openCamera() {
       const modal = document.getElementById('cameraModal');
       const video = document.getElementById('video');
       const status = document.getElementById('status');
-
       status.innerText = '';
+
+      // iOS Safariのジャイロセンサー権限取得
+      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        try {
+          const perm = await DeviceOrientationEvent.requestPermission();
+          if (perm === 'granted') {
+            window.addEventListener('deviceorientation', handleOrientation);
+          }
+        } catch (e) {
+          console.warn('ジャイロ権限エラー:', e);
+        }
+      } else {
+        // Android または非iOS
+        window.addEventListener('deviceorientation', handleOrientation);
+      }
 
       try {
         videoStream = await navigator.mediaDevices.getUserMedia({
@@ -220,20 +278,41 @@
         modal.style.display = 'block';
       } catch (err) {
         status.className = 'status-error';
-        status.innerText = `カメラ起動エラー: ${err.message} (Safariのカメラ許可設定を確認してください)`;
+        status.innerText = `カメラ起動エラー: ${err.message}`;
       }
     }
 
-    // カメラの終了
+    // 2. スマホの水平・平行度判定（真上から見下ろしているかを検知）
+    function handleOrientation(event) {
+      const levelBar = document.getElementById('levelBar');
+      const guideFrame = document.getElementById('guideFrame');
+      if (!levelBar || !guideFrame) return;
+
+      const beta = Math.abs(event.beta);   // 前後傾き
+      const gamma = Math.abs(event.gamma); // 左右傾き
+
+      // スマホの画面を天井に向け、背面の書類を真上から見下ろす姿勢（beta < 7度, gamma < 7度）
+      if (beta < 7 && gamma < 7) {
+        levelBar.classList.add('level-ok');
+        guideFrame.classList.add('level-ok');
+        levelBar.innerText = '🟢 水平OK！影が入っていなければ撮影してください';
+      } else {
+        levelBar.classList.remove('level-ok');
+        guideFrame.classList.remove('level-ok');
+        levelBar.innerText = '📱 スマホを書類と平行（真上から）にしてください';
+      }
+    }
+
     function closeCamera() {
       if (videoStream) {
         videoStream.getTracks().forEach(track => track.stop());
         videoStream = null;
       }
+      window.removeEventListener('deviceorientation', handleOrientation);
       document.getElementById('cameraModal').style.display = 'none';
     }
 
-    // 2. シャッター撮影
+    // 3. シャッター撮影
     function takeSnapshot() {
       const video = document.getElementById('video');
       const canvas = document.createElement('canvas');
@@ -242,7 +321,6 @@
       const ctx = canvas.getContext('2d');
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-      // 解像度を保持したまま圧縮（長辺1800px、品質0.85）
       const maxDim = 1800;
       let w = canvas.width, h = canvas.height;
       if (w > h && w > maxDim) { h = Math.round((h * maxDim) / w); w = maxDim; }
@@ -253,8 +331,6 @@
       resizeCanvas.getContext('2d').drawImage(canvas, 0, 0, w, h);
 
       currentBase64 = resizeCanvas.toDataURL('image/jpeg', 0.85).split(',')[1];
-
-      // プレビュー表示
       document.getElementById('previewImg').src = resizeCanvas.toDataURL('image/jpeg', 0.85);
       document.getElementById('previewWrapper').style.display = 'block';
 
@@ -262,7 +338,7 @@
       analyzeStockSheet();
     }
 
-    // 3. Gemini APIによる読み取り
+    // 4. Gemini API解析
     async function analyzeStockSheet() {
       const apiKey = document.getElementById('apiKeyInput').value.trim();
       if (!apiKey) {
@@ -281,10 +357,10 @@
       const prompt = `
         この画像は印刷された在庫表に、手書きで「繰り越し分」の数字を書き込んだシートです。
         以下の情報を読み取り、必ず指定のJSONオブジェクト形式のみで返してください。
-        余計な文章やマークダウン（\`\`\`json など）は含めないでください。
+        余計な文章やマークダウンは含めないでください。
 
-        1. シートの上部等に記載されている「月曜日の日付」（または該当する週の日付）。
-        2. 表の各行にある「食材名（品目名）」と、それに対応する手書きの「繰り越し分の数字」。
+        1. シート上部に記載されている「月曜日の日付」（週数）。
+        2. 表の各行にある「食材名」と、それに対応する手書きの「繰り越し分の数字」。
            （数字の記入がない空欄行は除外するか、数量0として扱ってください）
 
         【出力形式】
@@ -300,7 +376,6 @@
       let parsedData = null;
       let lastError = null;
 
-      // 混雑に備えた自動モデルフォールバック実行
       for (const model of MODEL_CANDIDATES) {
         try {
           status.innerText = `🤖 [${model}] で解析中...`;
@@ -321,14 +396,14 @@
           const data = await response.json();
           if (data.error) {
             lastError = data.error.message;
-            continue; // 次のモデルへ
+            continue;
           }
 
           if (data.candidates && data.candidates[0].content) {
             let text = data.candidates[0].content.parts[0].text.trim();
             text = text.replace(/```json/g, '').replace(/```/g, '').trim();
             parsedData = JSON.parse(text);
-            break; // 成功
+            break;
           }
         } catch (e) {
           lastError = e.message;
@@ -341,13 +416,11 @@
         return;
       }
 
-      // 4. テーブルへデータを展開
       renderEditor(parsedData);
       status.className = 'status-success';
       status.innerText = `✅ 読み取り完了（${parsedData.items.length}件）。誤りがあれば修正してください。`;
     }
 
-    // 4. 編集テーブルの描画
     function renderEditor(data) {
       document.getElementById('weekDate').value = data.week_date || '';
       const tbody = document.getElementById('tableBody');
@@ -360,7 +433,6 @@
       document.getElementById('editorArea').style.display = 'block';
     }
 
-    // 行追加
     function addRow(name = '', count = '') {
       const tbody = document.getElementById('tableBody');
       const tr = document.createElement('tr');
@@ -372,7 +444,6 @@
       tbody.appendChild(tr);
     }
 
-    // 5. 確定処理（次回スプレッドシート送信に接続する部分）
     function confirmData() {
       const weekDate = document.getElementById('weekDate').value.trim();
       const rows = document.querySelectorAll('#tableBody tr');
@@ -388,7 +459,7 @@
       });
 
       console.log("確定データ:", { week: weekDate, items: finalizedItems });
-      alert(`【確認完了】\n週: ${weekDate}\n品目数: ${finalizedItems.length}件\n\n※このデータをスプレッドシートに送信する仕組みを次回組み込みます。`);
+      alert(`【確認完了】\n週: ${weekDate}\n品目数: ${finalizedItems.length}件\n\n※このデータをスプレッドシートに送信する準備が整いました。`);
     }
   </script>
 </body>
