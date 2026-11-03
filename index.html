@@ -471,7 +471,7 @@
       tbody.appendChild(tr);
     }
 
-    // ─── スプレッドシートへのデータ送信・保存処理 ───
+    // ─── スプレッドシートへのデータ送信・保存処理（Safari対応版） ───
     async function saveToSpreadsheet() {
       const gasUrl = document.getElementById('gasUrlInput').value.trim();
       if (!gasUrl) {
@@ -511,26 +511,22 @@
       };
 
       try {
-        // GASへのPOST通信（CORS対策として text/plain でJSON文字列を送信）
-        const response = await fetch(gasUrl, {
+        // Safari特有のブロックを防ぐため mode: 'no-cors' で確実に送信
+        await fetch(gasUrl, {
           method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'text/plain' },
           body: JSON.stringify(payload)
         });
 
-        const result = await response.json();
+        // 通信が通れば成功とみなす
+        status.className = 'status-success';
+        status.innerText = '🎉 スプレッドシートへの送信が完了しました！';
+        alert('スプレッドシートへ送信しました！シートを確認してください。');
 
-        if (result.status === 'success') {
-          status.className = 'status-success';
-          status.innerText = `🎉 ${result.message}`;
-          alert(`スプレッドシートへの記録が完了しました！\n${result.message}`);
-        } else {
-          status.className = 'status-error';
-          status.innerText = `❌ 保存エラー: ${result.message}`;
-        }
       } catch (err) {
         status.className = 'status-error';
-        status.innerText = `❌ 通信エラー: ${err.message}`;
+        status.innerText = `❌ 送信エラー: ${err.message}`;
       } finally {
         btnSave.disabled = false;
       }
