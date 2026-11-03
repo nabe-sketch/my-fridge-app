@@ -2,7 +2,6 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8">
-  <!-- viewport-fit=cover でiPhoneの画面下部セーフエリアに対応 -->
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <title>在庫表スキャナー ＆ 修正エディタ</title>
   <style>
@@ -30,16 +29,15 @@
     }
     .btn-main:active { background: #0056b3; }
 
-    /* ─── フルスクリーンカメラモーダル（iOS Safari 完全対応） ─── */
+    /* カメラモーダル */
     #cameraModal {
       display: none; position: fixed; top: 0; left: 0; width: 100vw;
-      /* dvhでSafari下部バーを除いた正確な画面高さを取得 */
       height: 100vh; height: 100dvh;
       background: #000; z-index: 9999; overflow: hidden; touch-action: none;
     }
     video { width: 100%; height: 100%; object-fit: cover; }
 
-    /* 注意喚起ヘッダー（影防止など） */
+    /* ガイド案内 */
     .camera-header-tips {
       position: absolute; top: calc(8px + env(safe-area-inset-top, 0px));
       left: 10px; right: 10px;
@@ -47,34 +45,28 @@
       display: flex; justify-content: space-around; font-size: 11px; color: #fff;
       pointer-events: none; z-index: 2;
     }
-    .camera-header-tips span { display: flex; align-items: center; gap: 4px; }
 
-    /* 水平状態ナビゲーションバー */
     .level-indicator-bar {
       position: absolute; top: calc(52px + env(safe-area-inset-top, 0px));
       left: 20px; right: 20px; padding: 6px 12px;
       background: rgba(230, 81, 0, 0.85); color: #fff;
       border-radius: 20px; font-size: 13px; font-weight: bold; text-align: center;
-      transition: background 0.3s, transform 0.2s; pointer-events: none; z-index: 2;
+      transition: background 0.3s; pointer-events: none; z-index: 2;
     }
     .level-indicator-bar.level-ok {
       background: rgba(46, 125, 50, 0.9);
       box-shadow: 0 0 10px rgba(76, 175, 80, 0.8);
     }
 
-    /* A4撮影ガイド枠 */
+    /* A4用紙ガイド枠 */
     .guide-frame {
       position: absolute; top: 18%; left: 8%; width: 84%; height: 60%;
-      border: 3px dashed #ff9800; border-radius: 12px; box-sizing: border-box;
-      pointer-events: none; box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45);
+      border: 3px dashed #ff9800; border-radius: 10px; box-sizing: border-box;
+      pointer-events: none; box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5);
       transition: border-color 0.3s;
     }
-    /* 水平時に枠が緑色へ */
-    .guide-frame.level-ok {
-      border: 3px solid #00e676;
-    }
+    .guide-frame.level-ok { border: 3px solid #00e676; }
 
-    /* 照準センターマーク */
     .center-cross {
       position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
       width: 24px; height: 24px; pointer-events: none; opacity: 0.6;
@@ -85,10 +77,8 @@
     .center-cross::before { top: 11px; left: 0; width: 24px; height: 2px; }
     .center-cross::after { top: 0; left: 11px; width: 2px; height: 24px; }
 
-    /* カメラのコントロール部（ボタン重なり解消） */
     .camera-controls {
       position: absolute;
-      /* Safariのツールバー＋追加余白を確保して確実に浮かせる */
       bottom: calc(25px + env(safe-area-inset-bottom, 20px));
       left: 0; right: 0;
       display: flex; justify-content: space-around; align-items: center;
@@ -97,7 +87,7 @@
     .btn-shutter {
       width: 76px; height: 76px; border-radius: 50%;
       border: 5px solid #fff; background: rgba(255, 255, 255, 0.3);
-      cursor: pointer; outline: none; transition: transform 0.1s;
+      cursor: pointer; outline: none;
     }
     .btn-shutter:active { transform: scale(0.92); background: #fff; }
     .btn-cancel {
@@ -105,14 +95,15 @@
       padding: 10px 18px; border-radius: 20px; font-size: 0.9rem; cursor: pointer;
     }
 
-    /* ─── 修正テーブル＆結果エリア ─── */
+    /* 結果・エディタ */
     #status { margin-top: 15px; text-align: center; font-weight: bold; font-size: 0.9rem; }
     .status-loading { color: #d97706; }
     .status-success { color: #16a34a; }
     .status-error { color: #dc2626; }
 
     #previewWrapper { margin-top: 15px; display: none; text-align: center; }
-    #previewImg { max-width: 100%; height: auto; max-height: 180px; border-radius: 6px; border: 1px solid #ddd; }
+    #previewWrapper p { font-size: 0.75rem; color: #666; margin: 4px 0 0 0; }
+    #previewImg { max-width: 100%; height: auto; max-height: 220px; border-radius: 6px; border: 1px solid #cbd5e0; }
 
     #editorArea { display: none; margin-top: 20px; }
     .meta-box {
@@ -148,7 +139,6 @@
       border: none; border-radius: 10px; font-size: 1.05rem; font-weight: bold;
       cursor: pointer; margin-top: 15px;
     }
-    .btn-confirm:active { background: #28a745; }
   </style>
 </head>
 <body>
@@ -165,8 +155,10 @@
       📷 ガイド枠付きカメラを起動する
     </button>
 
+    <!-- トリミング後の画像プレビュー -->
     <div id="previewWrapper">
       <img id="previewImg" src="">
+      <p>※枠内だけを切り抜いてAIに送信しました</p>
     </div>
 
     <div id="status"></div>
@@ -198,28 +190,23 @@
     </div>
   </div>
 
-  <!-- フルスクリーンカメラ画面 -->
   <div id="cameraModal">
     <video id="video" autoplay playsinline muted></video>
 
-    <!-- 注意事項ヘッダー -->
     <div class="camera-header-tips">
       <span>💡 手元の影に注意</span>
       <span>📐 真上から平行に</span>
-      <span>🔲 枠内に全体を配置</span>
+      <span>🔲 枠内に書類全体を配置</span>
     </div>
 
-    <!-- 水平検知ステータス -->
     <div id="levelBar" class="level-indicator-bar">
       📱 スマホを書類と平行（真上）に向けてください
     </div>
 
-    <!-- ガイド枠と照準マーク -->
     <div id="guideFrame" class="guide-frame">
       <div class="center-cross"></div>
     </div>
 
-    <!-- コントロール部 -->
     <div class="camera-controls">
       <button type="button" class="btn-cancel" onclick="closeCamera()">キャンセル</button>
       <button type="button" class="btn-shutter" onclick="takeSnapshot()"></button>
@@ -242,14 +229,12 @@
       if (savedKey) document.getElementById('apiKeyInput').value = savedKey;
     };
 
-    // 1. カメラ起動 ＆ ジャイロセンサー許可（iOS 13+対応）
     async function openCamera() {
       const modal = document.getElementById('cameraModal');
       const video = document.getElementById('video');
       const status = document.getElementById('status');
       status.innerText = '';
 
-      // iOS Safariのジャイロセンサー権限取得
       if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
         try {
           const perm = await DeviceOrientationEvent.requestPermission();
@@ -260,7 +245,6 @@
           console.warn('ジャイロ権限エラー:', e);
         }
       } else {
-        // Android または非iOS
         window.addEventListener('deviceorientation', handleOrientation);
       }
 
@@ -282,20 +266,18 @@
       }
     }
 
-    // 2. スマホの水平・平行度判定（真上から見下ろしているかを検知）
     function handleOrientation(event) {
       const levelBar = document.getElementById('levelBar');
       const guideFrame = document.getElementById('guideFrame');
       if (!levelBar || !guideFrame) return;
 
-      const beta = Math.abs(event.beta);   // 前後傾き
-      const gamma = Math.abs(event.gamma); // 左右傾き
+      const beta = Math.abs(event.beta);
+      const gamma = Math.abs(event.gamma);
 
-      // スマホの画面を天井に向け、背面の書類を真上から見下ろす姿勢（beta < 7度, gamma < 7度）
       if (beta < 7 && gamma < 7) {
         levelBar.classList.add('level-ok');
         guideFrame.classList.add('level-ok');
-        levelBar.innerText = '🟢 水平OK！影が入っていなければ撮影してください';
+        levelBar.innerText = '🟢 水平OK！枠に合わせて撮影してください';
       } else {
         levelBar.classList.remove('level-ok');
         guideFrame.classList.remove('level-ok');
@@ -312,33 +294,83 @@
       document.getElementById('cameraModal').style.display = 'none';
     }
 
-    // 3. シャッター撮影
+    // ─── 枠内だけを自動切り抜き（クロップ）する処理 ───
     function takeSnapshot() {
       const video = document.getElementById('video');
-      const canvas = document.createElement('canvas');
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const guideFrame = document.getElementById('guideFrame');
 
-      const maxDim = 1800;
-      let w = canvas.width, h = canvas.height;
-      if (w > h && w > maxDim) { h = Math.round((h * maxDim) / w); w = maxDim; }
-      else if (h > maxDim) { w = Math.round((w * maxDim) / h); h = maxDim; }
+      // 1. 画面上の要素サイズとビデオ本来の解像度を取得
+      const videoRect = video.getBoundingClientRect();
+      const frameRect = guideFrame.getBoundingClientRect();
+      const vw = video.videoWidth;
+      const vh = video.videoHeight;
+
+      // 2. object-fit: cover による拡大・縮小スケールと余白オフセットを算出
+      const screenRatio = videoRect.width / videoRect.height;
+      const videoRatio = vw / vh;
+      let renderWidth, renderHeight, offsetX, offsetY;
+
+      if (screenRatio > videoRatio) {
+        renderWidth = videoRect.width;
+        renderHeight = videoRect.width / videoRatio;
+        offsetX = 0;
+        offsetY = (renderHeight - videoRect.height) / 2;
+      } else {
+        renderWidth = videoRect.height * videoRatio;
+        renderHeight = videoRect.height;
+        offsetX = (renderWidth - videoRect.width) / 2;
+        offsetY = 0;
+      }
+
+      const scale = vw / renderWidth;
+
+      // 3. 画面上のガイド枠の位置をビデオのピクセル座標に換算
+      let cropX = (frameRect.left - videoRect.left + offsetX) * scale;
+      let cropY = (frameRect.top - videoRect.top + offsetY) * scale;
+      let cropW = frameRect.width * scale;
+      let cropH = frameRect.height * scale;
+
+      // 4. 文字欠け防止のため、周囲に約4%の安全マージンを付与
+      const marginX = cropW * 0.04;
+      const marginY = cropH * 0.04;
+      cropX = Math.max(0, cropX - marginX);
+      cropY = Math.max(0, cropY - marginY);
+      cropW = Math.min(vw - cropX, cropW + (marginX * 2));
+      cropH = Math.min(vh - cropY, cropH + (marginY * 2));
+
+      // 5. 切り抜いた枠内だけをCanvasに描画
+      const canvas = document.createElement('canvas');
+      canvas.width = cropW;
+      canvas.height = cropH;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+
+      // 6. 画像の最適化（長辺1600px）
+      const maxDim = 1600;
+      let targetW = cropW, targetH = cropH;
+      if (cropW > cropH && cropW > maxDim) {
+        targetH = Math.round((cropH * maxDim) / cropW);
+        targetW = maxDim;
+      } else if (cropH > maxDim) {
+        targetW = Math.round((cropW * maxDim) / cropH);
+        targetH = maxDim;
+      }
 
       const resizeCanvas = document.createElement('canvas');
-      resizeCanvas.width = w; resizeCanvas.height = h;
-      resizeCanvas.getContext('2d').drawImage(canvas, 0, 0, w, h);
+      resizeCanvas.width = targetW;
+      resizeCanvas.height = targetH;
+      resizeCanvas.getContext('2d').drawImage(canvas, 0, 0, targetW, targetH);
 
-      currentBase64 = resizeCanvas.toDataURL('image/jpeg', 0.85).split(',')[1];
-      document.getElementById('previewImg').src = resizeCanvas.toDataURL('image/jpeg', 0.85);
+      // 切り抜いた画像データをセット
+      currentBase64 = resizeCanvas.toDataURL('image/jpeg', 0.88).split(',')[1];
+      document.getElementById('previewImg').src = resizeCanvas.toDataURL('image/jpeg', 0.88);
       document.getElementById('previewWrapper').style.display = 'block';
 
       closeCamera();
       analyzeStockSheet();
     }
 
-    // 4. Gemini API解析
+    // Gemini API解析
     async function analyzeStockSheet() {
       const apiKey = document.getElementById('apiKeyInput').value.trim();
       if (!apiKey) {
@@ -352,7 +384,7 @@
       editorArea.style.display = 'none';
 
       status.className = 'status-loading';
-      status.innerText = '🤖 AIが日付・食材・手書き数字を読み取っています...（約5秒）';
+      status.innerText = '🤖 切り抜いた画像から文字を読み取っています...';
 
       const prompt = `
         この画像は印刷された在庫表に、手書きで「繰り越し分」の数字を書き込んだシートです。
@@ -418,7 +450,7 @@
 
       renderEditor(parsedData);
       status.className = 'status-success';
-      status.innerText = `✅ 読み取り完了（${parsedData.items.length}件）。誤りがあれば修正してください。`;
+      status.innerText = `✅ 読み取り完了（${parsedData.items.length}件）。`;
     }
 
     function renderEditor(data) {
@@ -459,7 +491,7 @@
       });
 
       console.log("確定データ:", { week: weekDate, items: finalizedItems });
-      alert(`【確認完了】\n週: ${weekDate}\n品目数: ${finalizedItems.length}件\n\n※このデータをスプレッドシートに送信する準備が整いました。`);
+      alert(`【確認完了】\n週: ${weekDate}\n品目数: ${finalizedItems.length}件\n\n※スプレッドシートへの保存準備が整いました。`);
     }
   </script>
 </body>
