@@ -18,8 +18,9 @@
     .settings {
       background: #edf2f7; padding: 10px; border-radius: 8px; margin-bottom: 15px; font-size: 0.85rem;
     }
+    .settings label { font-weight: bold; display: block; margin-top: 6px; }
     .settings input {
-      width: 100%; padding: 8px; margin-top: 4px; box-sizing: border-box;
+      width: 100%; padding: 8px; margin-top: 3px; box-sizing: border-box;
       border: 1px solid #cbd5e0; border-radius: 4px; background: #fff;
     }
 
@@ -37,7 +38,6 @@
     }
     video { width: 100%; height: 100%; object-fit: cover; }
 
-    /* ガイド案内 */
     .camera-header-tips {
       position: absolute; top: calc(8px + env(safe-area-inset-top, 0px));
       left: 10px; right: 10px;
@@ -58,7 +58,6 @@
       box-shadow: 0 0 10px rgba(76, 175, 80, 0.8);
     }
 
-    /* A4用紙ガイド枠 */
     .guide-frame {
       position: absolute; top: 18%; left: 8%; width: 84%; height: 60%;
       border: 3px dashed #ff9800; border-radius: 10px; box-sizing: border-box;
@@ -95,7 +94,6 @@
       padding: 10px 18px; border-radius: 20px; font-size: 0.9rem; cursor: pointer;
     }
 
-    /* 結果・エディタ */
     #status { margin-top: 15px; text-align: center; font-weight: bold; font-size: 0.9rem; }
     .status-loading { color: #d97706; }
     .status-success { color: #16a34a; }
@@ -103,7 +101,7 @@
 
     #previewWrapper { margin-top: 15px; display: none; text-align: center; }
     #previewWrapper p { font-size: 0.75rem; color: #666; margin: 4px 0 0 0; }
-    #previewImg { max-width: 100%; height: auto; max-height: 220px; border-radius: 6px; border: 1px solid #cbd5e0; }
+    #previewImg { max-width: 100%; height: auto; max-height: 200px; border-radius: 6px; border: 1px solid #cbd5e0; }
 
     #editorArea { display: none; margin-top: 20px; }
     .meta-box {
@@ -116,7 +114,7 @@
       border-radius: 4px; width: 55%; text-align: center;
     }
 
-    .table-container { overflow-x: auto; max-height: 50vh; border: 1px solid #e2e8f0; border-radius: 6px; }
+    .table-container { overflow-x: auto; max-height: 45vh; border: 1px solid #e2e8f0; border-radius: 6px; }
     table { width: 100%; border-collapse: collapse; font-size: 0.9rem; background: #fff; }
     th, td { padding: 8px 10px; border-bottom: 1px solid #e2e8f0; text-align: left; }
     th { background: #f8fafc; font-weight: bold; color: #4a5568; position: sticky; top: 0; }
@@ -139,6 +137,7 @@
       border: none; border-radius: 10px; font-size: 1.05rem; font-weight: bold;
       cursor: pointer; margin-top: 15px;
     }
+    .btn-confirm:disabled { background: #a0aec0; cursor: not-allowed; }
   </style>
 </head>
 <body>
@@ -149,16 +148,18 @@
     <div class="settings">
       <label>🔑 Gemini APIキー:</label>
       <input type="password" id="apiKeyInput" placeholder="AIzaSy... を貼り付け">
+
+      <label>📊 GAS WebアプリURL（スプレッドシート連携用）:</label>
+      <input type="url" id="gasUrlInput" placeholder="https://script.google.com/macros/s/.../exec">
     </div>
 
     <button type="button" class="btn-main" onclick="openCamera()">
       📷 ガイド枠付きカメラを起動する
     </button>
 
-    <!-- トリミング後の画像プレビュー -->
     <div id="previewWrapper">
       <img id="previewImg" src="">
-      <p>※枠内だけを切り抜いてAIに送信しました</p>
+      <p>※枠内を切り抜いて解析しました</p>
     </div>
 
     <div id="status"></div>
@@ -184,8 +185,8 @@
 
       <button type="button" class="btn-add-row" onclick="addRow()">＋ 行を追加する</button>
 
-      <button type="button" class="btn-confirm" onclick="confirmData()">
-        ✅ この内容で確定する（保存準備）
+      <button type="button" id="btnSave" class="btn-confirm" onclick="saveToSpreadsheet()">
+        💾 スプレッドシートに保存・更新する
       </button>
     </div>
   </div>
@@ -227,6 +228,9 @@
     window.onload = () => {
       const savedKey = localStorage.getItem('gemini_api_key');
       if (savedKey) document.getElementById('apiKeyInput').value = savedKey;
+
+      const savedGasUrl = localStorage.getItem('gas_web_app_url');
+      if (savedGasUrl) document.getElementById('gasUrlInput').value = savedGasUrl;
     };
 
     async function openCamera() {
@@ -294,18 +298,15 @@
       document.getElementById('cameraModal').style.display = 'none';
     }
 
-    // ─── 枠内だけを自動切り抜き（クロップ）する処理 ───
     function takeSnapshot() {
       const video = document.getElementById('video');
       const guideFrame = document.getElementById('guideFrame');
 
-      // 1. 画面上の要素サイズとビデオ本来の解像度を取得
       const videoRect = video.getBoundingClientRect();
       const frameRect = guideFrame.getBoundingClientRect();
       const vw = video.videoWidth;
       const vh = video.videoHeight;
 
-      // 2. object-fit: cover による拡大・縮小スケールと余白オフセットを算出
       const screenRatio = videoRect.width / videoRect.height;
       const videoRatio = vw / vh;
       let renderWidth, renderHeight, offsetX, offsetY;
@@ -324,13 +325,11 @@
 
       const scale = vw / renderWidth;
 
-      // 3. 画面上のガイド枠の位置をビデオのピクセル座標に換算
       let cropX = (frameRect.left - videoRect.left + offsetX) * scale;
       let cropY = (frameRect.top - videoRect.top + offsetY) * scale;
       let cropW = frameRect.width * scale;
       let cropH = frameRect.height * scale;
 
-      // 4. 文字欠け防止のため、周囲に約4%の安全マージンを付与
       const marginX = cropW * 0.04;
       const marginY = cropH * 0.04;
       cropX = Math.max(0, cropX - marginX);
@@ -338,14 +337,12 @@
       cropW = Math.min(vw - cropX, cropW + (marginX * 2));
       cropH = Math.min(vh - cropY, cropH + (marginY * 2));
 
-      // 5. 切り抜いた枠内だけをCanvasに描画
       const canvas = document.createElement('canvas');
       canvas.width = cropW;
       canvas.height = cropH;
       const ctx = canvas.getContext('2d');
       ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
 
-      // 6. 画像の最適化（長辺1600px）
       const maxDim = 1600;
       let targetW = cropW, targetH = cropH;
       if (cropW > cropH && cropW > maxDim) {
@@ -361,7 +358,6 @@
       resizeCanvas.height = targetH;
       resizeCanvas.getContext('2d').drawImage(canvas, 0, 0, targetW, targetH);
 
-      // 切り抜いた画像データをセット
       currentBase64 = resizeCanvas.toDataURL('image/jpeg', 0.88).split(',')[1];
       document.getElementById('previewImg').src = resizeCanvas.toDataURL('image/jpeg', 0.88);
       document.getElementById('previewWrapper').style.display = 'block';
@@ -370,7 +366,6 @@
       analyzeStockSheet();
     }
 
-    // Gemini API解析
     async function analyzeStockSheet() {
       const apiKey = document.getElementById('apiKeyInput').value.trim();
       if (!apiKey) {
@@ -450,7 +445,7 @@
 
       renderEditor(parsedData);
       status.className = 'status-success';
-      status.innerText = `✅ 読み取り完了（${parsedData.items.length}件）。`;
+      status.innerText = `✅ 読み取り完了（${parsedData.items.length}件）。数字を確認して保存してください。`;
     }
 
     function renderEditor(data) {
@@ -476,22 +471,69 @@
       tbody.appendChild(tr);
     }
 
-    function confirmData() {
+    // ─── スプレッドシートへのデータ送信・保存処理 ───
+    async function saveToSpreadsheet() {
+      const gasUrl = document.getElementById('gasUrlInput').value.trim();
+      if (!gasUrl) {
+        alert('設定欄に「GAS WebアプリURL」を入力してください。');
+        return;
+      }
+      localStorage.setItem('gas_web_app_url', gasUrl);
+
       const weekDate = document.getElementById('weekDate').value.trim();
       const rows = document.querySelectorAll('#tableBody tr');
-      const finalizedItems = [];
+      const items = [];
 
       rows.forEach(tr => {
         const inputs = tr.querySelectorAll('input');
         const name = inputs[0].value.trim();
         const count = inputs[1].value.trim();
         if (name) {
-          finalizedItems.push({ name: name, count: count ? Number(count) : 0 });
+          items.push({ name: name, count: count ? Number(count) : 0 });
         }
       });
 
-      console.log("確定データ:", { week: weekDate, items: finalizedItems });
-      alert(`【確認完了】\n週: ${weekDate}\n品目数: ${finalizedItems.length}件\n\n※スプレッドシートへの保存準備が整いました。`);
+      if (items.length === 0) {
+        alert('送信する品目データがありません。');
+        return;
+      }
+
+      const btnSave = document.getElementById('btnSave');
+      const status = document.getElementById('status');
+
+      btnSave.disabled = true;
+      status.className = 'status-loading';
+      status.innerText = '📤 スプレッドシートに保存中...';
+
+      const payload = {
+        week: weekDate,
+        items: items
+      };
+
+      try {
+        // GASへのPOST通信（CORS対策として text/plain でJSON文字列を送信）
+        const response = await fetch(gasUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify(payload)
+        });
+
+        const result = await response.json();
+
+        if (result.status === 'success') {
+          status.className = 'status-success';
+          status.innerText = `🎉 ${result.message}`;
+          alert(`スプレッドシートへの記録が完了しました！\n${result.message}`);
+        } else {
+          status.className = 'status-error';
+          status.innerText = `❌ 保存エラー: ${result.message}`;
+        }
+      } catch (err) {
+        status.className = 'status-error';
+        status.innerText = `❌ 通信エラー: ${err.message}`;
+      } finally {
+        btnSave.disabled = false;
+      }
     }
   </script>
 </body>
