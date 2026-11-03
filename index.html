@@ -18,7 +18,7 @@
     .settings {
       background: #edf2f7; padding: 10px; border-radius: 8px; margin-bottom: 15px; font-size: 0.85rem;
     }
-    .settings label { font-weight: bold; display: block; margin-top: 6px; }
+    .settings label { font-weight: bold; display: block; margin-top: 4px; }
     .settings input {
       width: 100%; padding: 8px; margin-top: 3px; box-sizing: border-box;
       border: 1px solid #cbd5e0; border-radius: 4px; background: #fff;
@@ -148,9 +148,6 @@
     <div class="settings">
       <label>🔑 Gemini APIキー:</label>
       <input type="password" id="apiKeyInput" placeholder="AIzaSy... を貼り付け">
-
-      <label>📊 GAS WebアプリURL（スプレッドシート連携用）:</label>
-      <input type="url" id="gasUrlInput" placeholder="https://script.google.com/macros/s/.../exec">
     </div>
 
     <button type="button" class="btn-main" onclick="openCamera()">
@@ -216,6 +213,9 @@
   </div>
 
   <script>
+    // ★ あなたのGAS WebアプリURLを直接埋め込みました（スマホでの入力不要）
+    const TARGET_GAS_URL = "https://script.google.com/macros/s/AKfycbzYsgoIQCKUTur57kuvZm2H5h7t6lzW18ZUS0PvClJKWcH8WxjIlmH8pcszvR-n3-ohCA/exec";
+
     let videoStream = null;
     let currentBase64 = "";
 
@@ -228,9 +228,6 @@
     window.onload = () => {
       const savedKey = localStorage.getItem('gemini_api_key');
       if (savedKey) document.getElementById('apiKeyInput').value = savedKey;
-
-      const savedGasUrl = localStorage.getItem('gas_web_app_url');
-      if (savedGasUrl) document.getElementById('gasUrlInput').value = savedGasUrl;
     };
 
     async function openCamera() {
@@ -471,15 +468,8 @@
       tbody.appendChild(tr);
     }
 
-    // ─── スプレッドシートへのデータ送信・保存処理（Safari対応版） ───
+    // ─── スプレッドシートへの保存（URLは定数から自動送信） ───
     async function saveToSpreadsheet() {
-      const gasUrl = document.getElementById('gasUrlInput').value.trim();
-      if (!gasUrl) {
-        alert('設定欄に「GAS WebアプリURL」を入力してください。');
-        return;
-      }
-      localStorage.setItem('gas_web_app_url', gasUrl);
-
       const weekDate = document.getElementById('weekDate').value.trim();
       const rows = document.querySelectorAll('#tableBody tr');
       const items = [];
@@ -511,18 +501,16 @@
       };
 
       try {
-        // Safari特有のブロックを防ぐため mode: 'no-cors' で確実に送信
-        await fetch(gasUrl, {
+        await fetch(TARGET_GAS_URL, {
           method: 'POST',
           mode: 'no-cors',
           headers: { 'Content-Type': 'text/plain' },
           body: JSON.stringify(payload)
         });
 
-        // 通信が通れば成功とみなす
         status.className = 'status-success';
-        status.innerText = '🎉 スプレッドシートへの送信が完了しました！';
-        alert('スプレッドシートへ送信しました！シートを確認してください。');
+        status.innerText = '🎉 スプレッドシートへの保存・更新が完了しました！';
+        alert('スプレッドシートへの記録が完了しました！\nシートを確認してみてください。');
 
       } catch (err) {
         status.className = 'status-error';
